@@ -10,11 +10,11 @@ app.use(express.json());
 
 app.post('/analytics/page', (req, res) => {
     const { page_name, render_time_ms } = req.body;
-    
+
     db.run(
         `INSERT INTO page_views (page_name, render_time_ms) VALUES (?, ?)`,
         [page_name, render_time_ms],
-        function(err) {
+        function (err) {
             if (err) return res.status(500).json({ error: err.message });
             res.status(201).json({ message: 'Page view registrada!', id: this.lastID });
         }
@@ -23,11 +23,11 @@ app.post('/analytics/page', (req, res) => {
 
 app.post('/analytics/click', (req, res) => {
     const { button_name } = req.body;
-    
+
     db.run(
         `INSERT INTO button_clicks (button_name) VALUES (?)`,
         [button_name],
-        function(err) {
+        function (err) {
             if (err) return res.status(500).json({ error: err.message });
             res.status(201).json({ message: 'Clique registrado!', id: this.lastID });
         }
@@ -60,8 +60,18 @@ app.get('/dashboard', (req, res) => {
         `, [], (err, buttons) => {
             if (err) return res.status(500).json({ error: err.message });
             data.buttons = buttons;
-            
+
             res.json(data);
+        });
+    });
+});
+
+app.delete('/analytics/clear', (req, res) => {
+    db.serialize(() => {
+        db.run('DELETE FROM page_views');
+        db.run('DELETE FROM button_clicks', function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: 'Dados limpos com sucesso!' });
         });
     });
 });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
-import {
+import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts'
@@ -9,54 +9,111 @@ function App() {
   const [data, setData] = useState({ pages: [], buttons: [] })
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await axios.get('http://localhost:3000/dashboard')
-        setData(response.data)
-        setLoading(false)
-      } catch (error) {
-        console.error("Erro ao buscar dados:", error)
-        setLoading(false)
-      }
-    }
+  const formatName = (str) => {
+    if (!str) return '';
+    return str
+      .replace(/^(Tela|Botao)_/, '')
+      .replace(/_/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .trim();
+  };
 
+  const fetchData = async () => {
+    try {
+      const response = await axios.get('http://localhost:3000/dashboard')
+      
+      const formattedPages = response.data.pages.map(p => ({
+        ...p,
+        displayName: formatName(p.page_name)
+      }));
+      
+      const formattedButtons = response.data.buttons.map(b => ({
+        ...b,
+        displayName: formatName(b.button_name)
+      }));
+
+      setData({ pages: formattedPages, buttons: formattedButtons })
+      setLoading(false)
+    } catch (error) {
+      console.error("Erro ao buscar dados:", error)
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
     fetchData()
-    const interval = setInterval(fetchData, 3000)
+    const interval = setInterval(fetchData, 3000) 
     return () => clearInterval(interval)
   }, [])
 
-  if (loading) return <h2 style={styles.loading}>Carregando métricas... ☕</h2>
+  const handleClearData = async () => {
+    if (window.confirm("Atenção: Isso apagará todos os dados de teste. Deseja continuar?")) {
+      try {
+        await axios.delete('http://localhost:3000/analytics/clear')
+        setData({ pages: [], buttons: [] }) 
+      } catch (error) {
+        alert("Erro ao limpar os dados.")
+      }
+    }
+  }
 
-  const COLORS = ['#3E2723', '#D2691E', '#2E8B57', '#B22222']
+  if (loading) return <h2 style={styles.loading}>Carregando métricas do sistema...</h2>
+
+  const totalViews = data.pages.reduce((acc, curr) => acc + curr.views, 0)
+  const totalClicks = data.buttons.reduce((acc, curr) => acc + curr.clicks, 0)
+  const avgRenderGeneral = data.pages.length > 0 
+    ? Math.round(data.pages.reduce((acc, curr) => acc + curr.avg_render_time, 0) / data.pages.length) 
+    : 0
+
+  const COLORS = ['#2C3E50', '#E67E22', '#27AE60', '#C0392B', '#8E44AD', '#34495E', '#D35400']
 
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        <h1>📊 Dashboard Teste A/B - CaféExpress</h1>
-        <p>Monitoramento de Métricas de Performance e Engajamento</p>
+        <div>
+          <h1 style={styles.pageTitle}>Dashboard Analítico - Teste A/B</h1>
+          <p style={styles.pageSubtitle}>Monitoramento de Conversão e Performance de Aplicação Mobile</p>
+        </div>
+        <button style={styles.clearButton} onClick={handleClearData}>
+          Limpar Dados
+        </button>
       </header>
 
-      <div style={styles.grid}>
+      <div style={styles.kpiContainer}>
+        <div style={styles.kpiCard}>
+          <p style={styles.kpiTitle}>Total de Visualizações</p>
+          <p style={styles.kpiValue}>{totalViews}</p>
+        </div>
+        <div style={styles.kpiCard}>
+          <p style={styles.kpiTitle}>Total de Cliques em Botões</p>
+          <p style={styles.kpiValue}>{totalClicks}</p>
+        </div>
+        <div style={styles.kpiCard}>
+          <p style={styles.kpiTitle}>Tempo Médio Geral</p>
+          <p style={styles.kpiValue}>{avgRenderGeneral} ms</p>
+        </div>
+      </div>
 
+      <div style={styles.grid}>
+        
         <div style={styles.card}>
-          <h2>👆 Botões Mais Clicados (Conversão)</h2>
+          <h2 style={styles.cardTitle}>Taxa de Interação por Botão (Conversão)</h2>
           <div style={{ width: '100%', height: 300 }}>
             <ResponsiveContainer>
-              <BarChart data={data.buttons} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="button_name" tick={{ fontSize: 12 }} />
+              <BarChart data={data.buttons} margin={{ top: 20, right: 30, left: 0, bottom: 40 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                {/* Agora usamos o displayName que criamos */}
+                <XAxis dataKey="displayName" tick={{fontSize: 11}} angle={-25} textAnchor="end" />
                 <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="clicks" fill="#D2691E" name="Quantidade de Cliques" />
+                <Tooltip cursor={{fill: '#f5f5f5'}} />
+                <Bar dataKey="clicks" fill="#E67E22" name="Volume de Cliques" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         <div style={styles.card}>
-          <h2>👁️ Páginas Mais Acessadas</h2>
+          <h2 style={styles.cardTitle}>Distribuição de Tráfego por Página</h2>
           <div style={{ width: '100%', height: 300 }}>
             <ResponsiveContainer>
               <PieChart>
@@ -64,11 +121,12 @@ function App() {
                   data={data.pages}
                   cx="50%"
                   cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                  labelLine={true}
+                  label={({ displayName, percent }) => `${displayName} (${(percent * 100).toFixed(0)}%)`}
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="views"
+                  nameKey="displayName"
                 >
                   {data.pages.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -80,32 +138,23 @@ function App() {
           </div>
         </div>
 
-        <div style={{ ...styles.card, gridColumn: '1 / -1' }}>
-          <h2>⏱️ Performance (Tempo de Renderização)</h2>
-          <p style={{ marginBottom: 15, color: '#666' }}>Páginas com maior tempo médio de renderização (em milissegundos).</p>
-
-          <table style={styles.table}>
-            <thead>
-              <tr style={styles.tr}>
-                <th style={styles.th}>Página</th>
-                <th style={styles.th}>Total de Visitas</th>
-                <th style={styles.th}>Tempo Médio (ms)</th>
-                <th style={styles.th}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.pages.map((page, index) => (
-                <tr key={index} style={styles.tr}>
-                  <td style={styles.td}><strong>{page.page_name}</strong></td>
-                  <td style={styles.td}>{page.views}</td>
-                  <td style={styles.td}>{Math.round(page.avg_render_time)} ms</td>
-                  <td style={styles.td}>
-                    {page.avg_render_time > 200 ? '⚠️ Pesada' : '✅ Rápida'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{...styles.card, gridColumn: '1 / -1'}}>
+          <h2 style={styles.cardTitle}>Análise de Performance (Tempo de Renderização em ms)</h2>
+          <div style={{ width: '100%', height: 250 }}>
+            <ResponsiveContainer>
+              <BarChart data={data.pages} layout="vertical" margin={{ top: 5, right: 30, left: 100, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                <XAxis type="number" />
+                <YAxis dataKey="displayName" type="category" tick={{fontSize: 12}} width={150} />
+                <Tooltip cursor={{fill: '#f5f5f5'}} />
+                <Bar dataKey="avg_render_time" fill="#2C3E50" name="Tempo Médio (ms)" radius={[0, 4, 4, 0]}>
+                  {data.pages.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.avg_render_time > 200 ? '#C0392B' : '#27AE60'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
       </div>
@@ -114,15 +163,19 @@ function App() {
 }
 
 const styles = {
-  container: { fontFamily: 'sans-serif', padding: '20px', backgroundColor: '#f0f2f5', minHeight: '100vh' },
-  header: { textAlign: 'center', marginBottom: '30px', color: '#333' },
-  loading: { textAlign: 'center', marginTop: '50px' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px', maxWidth: '1200px', margin: '0 auto' },
-  card: { backgroundColor: '#fff', padding: '20px', borderRadius: '10px', boxShadow: '0 4px 8px rgba(0,0,0,0.1)' },
-  table: { width: '100%', borderCollapse: 'collapse' },
-  th: { textAlign: 'left', padding: '12px', borderBottom: '2px solid #ddd', backgroundColor: '#fafafa' },
-  td: { padding: '12px', borderBottom: '1px solid #eee' },
-  tr: { hover: { backgroundColor: '#f5f5f5' } }
+  container: { fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif", padding: '30px', backgroundColor: '#F8F9FA', minHeight: '100vh', color: '#333' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: '2px solid #E9ECEF', paddingBottom: '20px' },
+  pageTitle: { margin: 0, fontSize: '28px', color: '#2C3E50' },
+  pageSubtitle: { margin: '5px 0 0 0', color: '#7F8C8D', fontSize: '14px' },
+  clearButton: { backgroundColor: '#E74C3C', color: '#FFF', border: 'none', padding: '10px 20px', borderRadius: '6px', fontWeight: 'bold', cursor: 'pointer', transition: 'background 0.3s' },
+  loading: { textAlign: 'center', marginTop: '50px', color: '#7F8C8D' },
+  kpiContainer: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' },
+  kpiCard: { backgroundColor: '#FFF', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', borderLeft: '4px solid #3498DB' },
+  kpiTitle: { margin: 0, color: '#7F8C8D', fontSize: '14px', textTransform: 'uppercase', fontWeight: '600' },
+  kpiValue: { margin: '10px 0 0 0', fontSize: '32px', fontWeight: 'bold', color: '#2C3E50' },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '20px' },
+  card: { backgroundColor: '#FFF', padding: '25px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
+  cardTitle: { margin: '0 0 20px 0', fontSize: '18px', color: '#2C3E50', fontWeight: '600', borderBottom: '1px solid #E9ECEF', paddingBottom: '10px' },
 }
 
 export default App
